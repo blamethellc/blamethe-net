@@ -844,11 +844,13 @@
 
   <!-- FOOTER -->
   <footer>
-    <p>© 2025 BLAMETHE.net LLC · Oregon, USA</p>
+    <p>© <span id="footer-year"></span> BLAMETHE.net LLC · Oregon, USA</p>
     <p><a href="mailto:contact@blamethe.net">contact@blamethe.net</a></p>
   </footer>
 
   <script>
+    document.getElementById('footer-year').textContent = new Date().getFullYear();
+
     // Contact form — swap this endpoint for a Cloudflare Worker URL once deployed
     const form = document.getElementById('contactForm');
     const status = document.getElementById('formStatus');
