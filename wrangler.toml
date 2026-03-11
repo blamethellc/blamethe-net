@@ -1,5 +1,0 @@
-name = "blamethe-net"
-compatibility_date = "2025-03-10"
-
-[site]
-bucket = "."
