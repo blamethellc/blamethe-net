@@ -1,36 +1,27 @@
 /**
- * Cloudflare Worker — Contact Form Handler
- * Deploy as: /api/contact
+ * Cloudflare Pages Function — Contact Form Handler
+ * Route: /api/contact
  *
- * Uses MailChannels (free on Cloudflare Workers) to send email.
- * No API keys needed — MailChannels is natively integrated.
+ * Requires env var: RESEND_API_KEY
  */
 
-export default {
-  async fetch(request, env) {
-    if (request.method === 'OPTIONS') {
-      return new Response(null, { headers: corsHeaders() });
-    }
+export async function onRequestPost(context) {
+  const { request, env } = context;
 
-    if (request.method !== 'POST') {
-      return new Response('Method not allowed', { status: 405 });
-    }
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return new Response('Invalid JSON', { status: 400 });
+  }
 
-    let body;
-    try {
-      body = await request.json();
-    } catch {
-      return new Response('Invalid JSON', { status: 400 });
-    }
+  const { name, email, org, type, message } = body;
 
-    const { name, email, org, type, message } = body;
+  if (!name || !email || !message) {
+    return new Response('Missing required fields', { status: 400 });
+  }
 
-    if (!name || !email || !message) {
-      return new Response('Missing required fields', { status: 400 });
-    }
-
-    const emailBody = `
-New contact form submission — blamethe.net
+  const emailBody = `New contact form submission — blamethe.net
 
 Name:         ${name}
 Email:        ${email}
@@ -38,40 +29,41 @@ Organization: ${org || '—'}
 Type:         ${type || '—'}
 
 Message:
-${message}
-    `.trim();
+${message}`.trim();
 
-    const mailReq = await fetch('https://api.mailchannels.net/tx/v1/send', {
-      method: 'POST',
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${env.RESEND_API_KEY}`,
+    },
+    body: JSON.stringify({
+      from: 'blamethe.net contact form <noreply@blamethe.net>',
+      to: ['contact@blamethe.net'],
+      reply_to: `${name} <${email}>`,
+      subject: `[blamethe.net] New inquiry from ${name}`,
+      text: emailBody,
+    }),
+  });
+
+  if (res.ok) {
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        personalizations: [{
-          to: [{ email: 'contact@blamethe.net', name: 'Blame The LLC' }],
-          reply_to: { email, name },
-        }],
-        from: { email: 'noreply@blamethe.net', name: 'blamethe.net contact form' },
-        subject: `[blamethe.net] New inquiry from ${name}`,
-        content: [{ type: 'text/plain', value: emailBody }],
-      }),
     });
+  }
 
-    if (mailReq.status === 202) {
-      return new Response(JSON.stringify({ ok: true }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders() },
-      });
-    }
+  const err = await res.text();
+  console.error('Resend error:', res.status, err);
+  return new Response('Mail delivery failed', { status: 500 });
+}
 
-    const errText = await mailReq.text();
-    console.error('MailChannels error:', mailReq.status, errText);
-    return new Response('Mail delivery failed', { status: 500 });
-  },
-};
-
-function corsHeaders() {
-  return {
-    'Access-Control-Allow-Origin': 'https://blamethe.net',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
-  };
+export async function onRequestOptions() {
+  return new Response(null, {
+    headers: {
+      'Access-Control-Allow-Origin': 'https://blamethe.net',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    },
+  });
 }
